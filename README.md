@@ -7,14 +7,14 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/zijiren233/google-translater"
+	translater "github.com/zijiren233/google-translater"
 	"golang.org/x/time/rate"
 )
 
 func translate(text string) string {
-	translated, err := gtranslate.Translate(
+	translated, err := translater.Translate(
 		text,
-		gtranslate.TranslationParams{
+		translater.TranslationParams{
 			From: "auto",
 			To:   "en",
 		},
