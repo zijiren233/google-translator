@@ -5,6 +5,18 @@ import (
 	"time"
 )
 
+type Translated struct {
+	Detected      Detected `json:"detected"`
+	Text          string   `json:"text"`          // translated text
+	Pronunciation string   `json:"pronunciation"` // pronunciation of translated text
+}
+
+// Detected represents language detection result
+type Detected struct {
+	Lang       string  `json:"lang"`       // detected language
+	Confidence float64 `json:"confidence"` // the confidence of detection result (0.00 to 1.00)
+}
+
 var googleHostList = []string{"google.com"}
 
 // come from http://m.news.xixik.com/content/25df0c00ac300bdc/
@@ -38,7 +50,7 @@ type TranslationParams struct {
 }
 
 // TranslateWithParams translate a text with simple params as string
-func Translate(text string, params TranslationParams) (string, error) {
+func Translate(text string, params TranslationParams) (Translated, error) {
 	var googleHost string
 	if params.GoogleHost == "" {
 		select {
@@ -52,7 +64,7 @@ func Translate(text string, params TranslationParams) (string, error) {
 	}
 	translated, err := translate(text, params.From, params.To, googleHost, true, params.Retry, params.RetryDelay, params.Client)
 	if err != nil {
-		return "", err
+		return translated, err
 	}
 	return translated, nil
 }

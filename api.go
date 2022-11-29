@@ -1,13 +1,15 @@
 package gtranslate
 
 import (
-	"encoding/json"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
+	"strconv"
+	"strings"
+	"text/scanner"
 	"time"
 
 	"golang.org/x/text/language"
@@ -21,18 +23,16 @@ const (
 	defaultNumberOfRetries = 2
 )
 
-func translate(text, from, to, googleHost string, withVerification bool, tries int, delay time.Duration, client *http.Client) (string, error) {
+func translate(text, from, to, googleHost string, withVerification bool, tries int, delay time.Duration, client *http.Client) (result Translated, err error) {
 	if tries == 0 {
 		tries = defaultNumberOfRetries
 	}
 
 	if withVerification {
 		if _, err := language.Parse(from); err != nil && from != "auto" {
-			log.Println("[WARNING], '" + from + "' is a invalid language, switching to 'auto'")
 			from = "auto"
 		}
 		if _, err := language.Parse(to); err != nil {
-			log.Println("[WARNING], '" + to + "' is a invalid language, switching to 'en'")
 			to = "en"
 		}
 	}
@@ -59,7 +59,7 @@ func translate(text, from, to, googleHost string, withVerification bool, tries i
 
 	u, err := url.Parse(urll)
 	if err != nil {
-		return "", nil
+		return result, err
 	}
 
 	parameters := url.Values{}
@@ -85,9 +85,9 @@ func translate(text, from, to, googleHost string, withVerification bool, tries i
 
 		if err != nil {
 			if err == http.ErrHandlerTimeout {
-				return "", errors.New("bad network, please check your internet connection")
+				return result, errors.New("bad network, please check your internet connection")
 			}
-			return "", err
+			return result, err
 		}
 
 		if r.StatusCode == http.StatusOK {
@@ -102,27 +102,50 @@ func translate(text, from, to, googleHost string, withVerification bool, tries i
 
 	raw, err := io.ReadAll(r.Body)
 	if err != nil {
-		return "", err
+		return result, err
 	}
 
-	var resp []interface{}
+	return parseRawTranslated(raw)
+}
 
-	err = json.Unmarshal([]byte(raw), &resp)
-	if err != nil {
-		return "", err
-	}
-
-	responseText := ""
-	for _, obj := range resp[0].([]interface{}) {
-		if len(obj.([]interface{})) == 0 {
-			break
+func parseRawTranslated(data []byte) (result Translated, err error) {
+	var s scanner.Scanner
+	s.Init(bytes.NewReader(data))
+	var (
+		coord       = []int{-1}
+		textBuilder strings.Builder
+	)
+	for tok := s.Scan(); tok != scanner.EOF; tok = s.Scan() {
+		switch tok {
+		case '[':
+			coord[len(coord)-1]++
+			coord = append(coord, -1)
+		case ']':
+			coord = coord[:len(coord)-1]
+		case ',':
+			// no-op
+		default:
+			tokText := s.TokenText()
+			coord[len(coord)-1]++
+			if len(coord) == 4 && coord[1] == 0 && coord[3] == 0 {
+				if tokText != "null" {
+					textBuilder.WriteString(tokText[1 : len(tokText)-1])
+				}
+			}
+			if len(coord) == 4 && coord[0] == 0 && coord[1] == 0 && coord[2] == 1 && coord[3] == 3 {
+				if tokText != "null" {
+					result.Pronunciation = tokText[1 : len(tokText)-1]
+				}
+			}
+			if len(coord) == 2 && coord[0] == 0 && coord[1] == 2 {
+				result.Detected.Lang = tokText[1 : len(tokText)-1]
+			}
+			if len(coord) == 2 && coord[0] == 0 && coord[1] == 6 {
+				result.Detected.Confidence, _ = strconv.ParseFloat(s.TokenText(), 64)
+			}
 		}
-
-		t, ok := obj.([]interface{})[0].(string)
-		if ok {
-			responseText += t
-		}
 	}
+	result.Text = textBuilder.String()
 
-	return responseText, nil
+	return result, nil
 }
