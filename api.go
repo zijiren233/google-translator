@@ -132,7 +132,7 @@ func parseRawTranslated(data []byte) (result Translated, err error) {
 					textBuilder.WriteString(tokText[1 : len(tokText)-1])
 				}
 			}
-			if len(coord) == 4 && coord[0] == 0 && coord[1] == 0 && coord[2] == 1 && coord[3] == 3 {
+			if len(coord) == 4 && coord[0] == 0 && coord[1] == 0 && coord[3] == 3 {
 				if tokText != "null" {
 					result.Pronunciation = tokText[1 : len(tokText)-1]
 				}

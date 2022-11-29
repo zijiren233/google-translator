@@ -2,6 +2,7 @@ package gtranslate
 
 import (
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -51,6 +52,7 @@ type TranslationParams struct {
 
 // TranslateWithParams translate a text with simple params as string
 func Translate(text string, params TranslationParams) (Translated, error) {
+	text = strings.ReplaceAll(text, "\n", "")
 	var googleHost string
 	if params.GoogleHost == "" {
 		select {
