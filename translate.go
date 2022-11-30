@@ -64,9 +64,5 @@ func Translate(text string, params TranslationParams) (Translated, error) {
 	} else {
 		googleHost = params.GoogleHost
 	}
-	translated, err := translate(text, params.From, params.To, googleHost, true, params.Retry, params.RetryDelay, params.Client)
-	if err != nil {
-		return translated, err
-	}
-	return translated, nil
+	return translate(text, params.From, params.To, googleHost, true, params.Retry, params.RetryDelay, params.Client)
 }
