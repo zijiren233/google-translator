@@ -50,19 +50,36 @@ type TranslationParams struct {
 	Client     *http.Client
 }
 
+const (
+	defaultNumberOfRetries = 2
+)
+
 // TranslateWithParams translate a text with simple params as string
-func Translate(text string, params TranslationParams) (Translated, error) {
+func Translate(text string, params TranslationParams) (translated Translated, err error) {
 	text = strings.ReplaceAll(text, "\n", "")
-	var googleHost string
-	if params.GoogleHost == "" {
-		select {
-		case googleHost = <-sw:
-			defer func() { sw <- googleHost }()
-		default:
-			googleHost = "google.com"
-		}
-	} else {
-		googleHost = params.GoogleHost
+
+	if params.Retry == 0 {
+		params.Retry = defaultNumberOfRetries
 	}
-	return translate(text, params.From, params.To, googleHost, true, params.Retry, params.RetryDelay, params.Client)
+
+	var googleHost string
+
+	for params.Retry > 0 {
+		if params.GoogleHost == "" {
+			googleHost = <-sw
+		} else {
+			googleHost = params.GoogleHost
+		}
+		translated, err = translate(text, params.From, params.To, googleHost, true, params.Client)
+		if params.GoogleHost == "" {
+			sw <- googleHost
+		}
+		if err == nil {
+			return
+		}
+		params.Retry--
+		time.Sleep(params.RetryDelay)
+	}
+
+	return
 }

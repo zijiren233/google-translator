@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"text/scanner"
-	"time"
 
 	"golang.org/x/text/language"
 
@@ -19,13 +18,9 @@ import (
 
 var ttk, _ = otto.ToValue("0")
 
-const (
-	defaultNumberOfRetries = 2
-)
-
-func translate(text, from, to, googleHost string, withVerification bool, tries int, delay time.Duration, client *http.Client) (result Translated, err error) {
-	if tries == 0 {
-		tries = defaultNumberOfRetries
+func translate(text, from, to, googleHost string, withVerification bool, client *http.Client) (result Translated, err error) {
+	if client == nil {
+		client = http.DefaultClient
 	}
 
 	if withVerification {
@@ -76,28 +71,21 @@ func translate(text, from, to, googleHost string, withVerification bool, tries i
 
 	var r *http.Response
 
-	for tries > 0 {
-		if client != nil {
-			r, err = client.Get(u.String())
-		} else {
-			r, err = http.Get(u.String())
-		}
+	if client != nil {
+		r, err = client.Get(u.String())
+	} else {
+		r, err = http.Get(u.String())
+	}
 
-		if err != nil {
-			if err == http.ErrHandlerTimeout {
-				return result, errors.New("bad network, please check your internet connection")
-			}
-			return result, err
+	if err != nil {
+		if err == http.ErrHandlerTimeout {
+			return result, errors.New("bad network, please check your internet connection")
 		}
+		return result, err
+	}
 
-		if r.StatusCode == http.StatusOK {
-			break
-		}
-
-		if r.StatusCode == http.StatusForbidden {
-			tries--
-			time.Sleep(delay)
-		}
+	if r.StatusCode != http.StatusOK {
+		return result, fmt.Errorf("return err, code: %d", r.StatusCode)
 	}
 
 	raw, err := io.ReadAll(r.Body)
@@ -105,10 +93,14 @@ func translate(text, from, to, googleHost string, withVerification bool, tries i
 		return result, err
 	}
 
-	return parseRawTranslated(raw)
+	if http.DetectContentType(raw) != `text/plain; charset=utf-8` {
+		return result, fmt.Errorf("return err, code: %d", r.StatusCode)
+	}
+
+	return parseRawTranslated(raw), nil
 }
 
-func parseRawTranslated(data []byte) (result Translated, err error) {
+func parseRawTranslated(data []byte) (result Translated) {
 	var s scanner.Scanner
 	s.Init(bytes.NewReader(data))
 	var (
@@ -147,5 +139,5 @@ func parseRawTranslated(data []byte) (result Translated, err error) {
 	}
 	result.Text = textBuilder.String()
 
-	return result, nil
+	return
 }
