@@ -107,8 +107,7 @@ func parseRawTranslated(data []byte) (*Translated, error) {
 	}
 
 	resp := &Translated{}
-	l := len(d[0].([]interface{}))
-	for k, obj := range d[0].([]interface{}) {
+	for _, obj := range d[0].([]interface{}) {
 		lObg := len(obj.([]interface{}))
 		if lObg == 0 {
 			break
@@ -117,10 +116,8 @@ func parseRawTranslated(data []byte) (*Translated, error) {
 		if t, ok := obj.([]interface{})[0].(string); ok {
 			resp.Text += t
 		} else if t, ok := obj.([]interface{})[lObg-1].(string); ok {
-			if k == l-1 {
-				resp.Pronunciation = t
-				break
-			}
+			resp.Pronunciation = t
+			break
 		}
 
 	}
