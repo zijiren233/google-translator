@@ -2,7 +2,6 @@ package gtranslate
 
 import (
 	"net/http"
-	"strings"
 	"time"
 )
 
@@ -55,9 +54,7 @@ const (
 )
 
 // TranslateWithParams translate a text with simple params as string
-func Translate(text string, params TranslationParams) (translated Translated, err error) {
-	text = strings.ReplaceAll(text, "\n", "")
-
+func Translate(text string, params TranslationParams) (translated *Translated, err error) {
 	if params.Retry == 0 {
 		params.Retry = defaultNumberOfRetries
 	}

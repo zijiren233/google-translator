@@ -1,15 +1,12 @@
 package gtranslate
 
 import (
-	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"strconv"
-	"strings"
-	"text/scanner"
 
 	"golang.org/x/text/language"
 
@@ -18,7 +15,7 @@ import (
 
 var ttk, _ = otto.ToValue("0")
 
-func translate(text, from, to, googleHost string, withVerification bool, client *http.Client) (result Translated, err error) {
+func translate(text, from, to, googleHost string, withVerification bool, client *http.Client) (result *Translated, err error) {
 	if client == nil {
 		client = http.DefaultClient
 	}
@@ -94,50 +91,42 @@ func translate(text, from, to, googleHost string, withVerification bool, client 
 	}
 
 	if http.DetectContentType(raw) != `text/plain; charset=utf-8` {
-		return result, fmt.Errorf("return err, code: %d", r.StatusCode)
+		return result, fmt.Errorf("return err, code: %d\n raw: %s", r.StatusCode, raw)
 	}
 
-	return parseRawTranslated(raw), nil
+	return parseRawTranslated(raw)
 }
 
-func parseRawTranslated(data []byte) (result Translated) {
-	var s scanner.Scanner
-	s.Init(bytes.NewReader(data))
-	var (
-		coord       = []int{-1}
-		textBuilder strings.Builder
-	)
-	for tok := s.Scan(); tok != scanner.EOF; tok = s.Scan() {
-		switch tok {
-		case '[':
-			coord[len(coord)-1]++
-			coord = append(coord, -1)
-		case ']':
-			coord = coord[:len(coord)-1]
-		case ',':
-			// no-op
-		default:
-			tokText := s.TokenText()
-			coord[len(coord)-1]++
-			if len(coord) == 4 && coord[1] == 0 && coord[3] == 0 {
-				if tokText != "null" {
-					textBuilder.WriteString(tokText[1 : len(tokText)-1])
-				}
-			}
-			if len(coord) == 4 && coord[0] == 0 && coord[1] == 0 && coord[3] == 3 {
-				if tokText != "null" {
-					result.Pronunciation = tokText[1 : len(tokText)-1]
-				}
-			}
-			if len(coord) == 2 && coord[0] == 0 && coord[1] == 2 {
-				result.Detected.Lang = tokText[1 : len(tokText)-1]
-			}
-			if len(coord) == 2 && coord[0] == 0 && coord[1] == 6 {
-				result.Detected.Confidence, _ = strconv.ParseFloat(s.TokenText(), 64)
+func parseRawTranslated(data []byte) (*Translated, error) {
+
+	var d []interface{}
+
+	err := json.Unmarshal(data, &d)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := &Translated{}
+	l := len(d[0].([]interface{}))
+	for k, obj := range d[0].([]interface{}) {
+		lObg := len(obj.([]interface{}))
+		if lObg == 0 {
+			break
+		}
+
+		if t, ok := obj.([]interface{})[0].(string); ok {
+			resp.Text += t
+		} else if t, ok := obj.([]interface{})[lObg-1].(string); ok {
+			if k == l-1 {
+				resp.Pronunciation = t
+				break
 			}
 		}
-	}
-	result.Text = textBuilder.String()
 
-	return
+	}
+
+	resp.Detected.Lang = d[2].(string)
+	resp.Detected.Confidence = d[6].(float64)
+
+	return resp, nil
 }
