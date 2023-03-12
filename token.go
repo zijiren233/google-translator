@@ -7,144 +7,126 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
-
-	"github.com/robertkrimen/otto"
 )
 
-var vm = otto.New()
-var lock = &sync.Mutex{}
-
-func sM(a otto.Value, TTK ...otto.Value) (otto.Value, error) {
-	lock.Lock()
-	defer lock.Unlock()
-	err := vm.Set("x", a)
+func sM(a, ttk string) string {
+	d := strings.Split(ttk, ".")
+	b, err := strconv.ParseInt(d[0], 10, 64)
 	if err != nil {
-		return otto.UndefinedValue(), err
+		return ""
 	}
-	if len(TTK) > 0 {
-		_ = vm.Set("internalTTK", TTK[0])
+	var (
+		e = []int{}
+	)
+	runes := []rune(a)
+
+	for g := 0; g < len(runes); g++ {
+		var l = int(runes[g])
+		if l < 128 {
+			e = append(e, l)
+		} else if l < 2048 {
+			e = append(e, (l>>6)|192)
+		} else if (l&64512) == 55296 && g+1 < len(runes) && (int(runes[g+1])&64512) == 56320 {
+			l = 65536 + ((l & 1023) << 10) + (int(runes[g+1]) & 1023)
+			e = append(e, (l>>18)|240)
+			e = append(e, ((l>>12)&63)|128)
+			g++
+		} else {
+			e = append(e, (l>>12)|224)
+			e = append(e, ((l>>6)&63)|128)
+			e = append(e, (l&63)|128)
+		}
+	}
+	tmp := int(b)
+	for f1 := 0; f1 < len(e); f1++ {
+		tmp += e[f1]
+		tmp = xr(tmp, "+-a^+6")
+	}
+	tmp = xr(tmp, "+-3^+b+-f")
+
+	if len(d) >= 2 {
+		i, err := strconv.ParseInt(d[1], 10, 64)
+		if err != nil {
+			return ""
+		}
+		tmp ^= int(i)
 	} else {
-		_ = vm.Set("internalTTK", "0")
+		tmp ^= 0
 	}
-	result, err := vm.Run(`
-		function sM(a) {
-			var b;
-			if (null !== yr)
-				b = yr;
-			else {
-				b = wr(String.fromCharCode(84));
-				var c = wr(String.fromCharCode(75));
-				b = [b(), b()];
-				b[1] = c();
-				b = (yr = window[b.join(c())] || "") || ""
-			}
-			var d = wr(String.fromCharCode(116))
-				, c = wr(String.fromCharCode(107))
-				, d = [d(), d()];
-			d[1] = c();
-			c = "&" + d.join("") + "=";
-			d = b.split(".");
-			b = Number(d[0]) || 0;
-			for (var e = [], f = 0, g = 0; g < a.length; g++) {
-				var l = a.charCodeAt(g);
-				128 > l ? e[f++] = l : (2048 > l ? e[f++] = l >> 6 | 192 : (55296 == (l & 64512) && g + 1 < a.length && 56320 == (a.charCodeAt(g + 1) & 64512) ? (l = 65536 + ((l & 1023) << 10) + (a.charCodeAt(++g) & 1023),
-					e[f++] = l >> 18 | 240,
-					e[f++] = l >> 12 & 63 | 128) : e[f++] = l >> 12 | 224,
-					e[f++] = l >> 6 & 63 | 128),
-					e[f++] = l & 63 | 128)
-			}
-			a = b;
-			for (f = 0; f < e.length; f++)
-				a += e[f],
-					a = xr(a, "+-a^+6");
-			a = xr(a, "+-3^+b+-f");
-			a ^= Number(d[1]) || 0;
-			0 > a && (a = (a & 2147483647) + 2147483648);
-			a %= 1E6;
-			return c + (a.toString() + "." + (a ^ b))
-		}
-
-		var yr = null;
-		var wr = function(a) {
-			return function() {
-				return a
-			}
-		}
-			, xr = function(a, b) {
-			for (var c = 0; c < b.length - 2; c += 3) {
-				var d = b.charAt(c + 2)
-					, d = "a" <= d ? d.charCodeAt(0) - 87 : Number(d)
-					, d = "+" == b.charAt(c + 1) ? a >>> d : a << d;
-				a = "+" == b.charAt(c) ? a + d & 4294967295 : a ^ d
-			}
-			return a
-		};
-		
-		var window = {
-			TKK: internalTTK
-		};
-
-		sM(x)
-	`)
-	if err != nil {
-		return otto.UndefinedValue(), err
+	if tmp < 0 {
+		tmp = (tmp & 2147483647) + 2147483648
 	}
-	return result, nil
+	tmp %= 1e6
+
+	return fmt.Sprintf("&tk=%d.%d", tmp, tmp^int(b))
 }
 
-func updateTTK(TTK otto.Value, googleHost string, client *http.Client) (otto.Value, error) {
+func xr(a int, b string) int {
+	runes := []rune(b)
+	for c := 0; c < len(runes)-2; c += 3 {
+		d := runes[c+2]
+		if 'a' <= d {
+			d = d - 87
+		} else {
+			d = d - '0'
+		}
+		var result int
+		if runes[c+1] == '+' {
+			result = int(uint(a) >> d)
+		} else {
+			result = a << d
+		}
+
+		if runes[c] == '+' {
+			a = (a + result) & 4294967295
+		} else {
+			a = a ^ result
+		}
+	}
+	return a
+}
+
+func updateTTK(TTK string, googleHost string, client *http.Client) (string, error) {
 	t := time.Now().UnixNano() / 3600000
 	now := float64(t)
-	ttk, err := strconv.ParseFloat(TTK.String(), 64)
+	ttk, err := strconv.ParseFloat(TTK, 64)
 	if err != nil {
-		return otto.UndefinedValue(), err
+		return "0", err
 	}
 
 	if ttk == now {
 		return TTK, nil
 	}
 
-	var resp *http.Response
-	if client != nil {
-		resp, err = client.Get(fmt.Sprintf("https://translate.%s", googleHost))
-	} else {
-		resp, err = http.Get(fmt.Sprintf("https://translate.%s", googleHost))
-	}
+	resp, err := client.Get(fmt.Sprintf("https://translate.%s", googleHost))
 	if err != nil {
-		return otto.UndefinedValue(), err
+		return "0", err
 	}
+	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return otto.UndefinedValue(), err
+		return "0", err
 	}
-
 	matches := regexp.MustCompile(`tkk:\s?'(.+?)'`).FindStringSubmatch(string(body))
 	if len(matches) > 0 {
-		v, err := otto.ToValue(matches[0])
-		if err != nil {
-			return otto.UndefinedValue(), err
-		}
-		return v, nil
+		return matches[0], nil
 	}
 
 	return TTK, nil
 }
 
-func get(text otto.Value, ttk otto.Value, googleHost string, client *http.Client) string {
+func get(text, ttk, googleHost string, client *http.Client) string {
 	ttk, err := updateTTK(ttk, googleHost, client)
 	if err != nil {
 		return ""
 	}
-
-	tk, err := sM(text, ttk)
+	tk := sM(text, ttk)
 
 	if err != nil {
 		return ""
 	}
-	sTk := strings.Replace(tk.String(), "&tk=", "", -1)
+	sTk := strings.Replace(tk, "&tk=", "", -1)
 	return sTk
-
 }

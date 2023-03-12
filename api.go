@@ -9,11 +9,9 @@ import (
 	"net/url"
 
 	"golang.org/x/text/language"
-
-	"github.com/robertkrimen/otto"
 )
 
-var ttk, _ = otto.ToValue("0")
+var dt = [...]string{"at", "bd", "ex", "ld", "md", "qca", "rw", "rm", "ss", "t"}
 
 func translate(text, from, to, googleHost string, withVerification bool, client *http.Client) (result *Translated, err error) {
 	if client == nil {
@@ -29,12 +27,9 @@ func translate(text, from, to, googleHost string, withVerification bool, client 
 		}
 	}
 
-	t, _ := otto.ToValue(text)
-
 	urll := fmt.Sprintf("https://translate.%s/translate_a/single", googleHost)
 
-	token := get(t, ttk, googleHost, client)
-
+	token := get(text, "0", googleHost, client)
 	data := map[string]string{
 		"client": "gtx",
 		"sl":     from,
@@ -59,27 +54,21 @@ func translate(text, from, to, googleHost string, withVerification bool, client 
 	for k, v := range data {
 		parameters.Add(k, v)
 	}
-	for _, v := range []string{"at", "bd", "ex", "ld", "md", "qca", "rw", "rm", "ss", "t"} {
+	for _, v := range dt {
 		parameters.Add("dt", v)
 	}
 
 	parameters.Add("tk", token)
 	u.RawQuery = parameters.Encode()
 
-	var r *http.Response
-
-	if client != nil {
-		r, err = client.Get(u.String())
-	} else {
-		r, err = http.Get(u.String())
-	}
-
+	r, err := client.Get(u.String())
 	if err != nil {
 		if err == http.ErrHandlerTimeout {
 			return result, errors.New("bad network, please check your internet connection")
 		}
 		return result, err
 	}
+	defer r.Body.Close()
 
 	if r.StatusCode != http.StatusOK {
 		return result, fmt.Errorf("return err, code: %d", r.StatusCode)
