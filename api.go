@@ -11,8 +11,6 @@ import (
 	"golang.org/x/text/language"
 )
 
-var dt = [...]string{"at", "bd", "ex", "ld", "md", "qca", "rw", "rm", "ss", "t"}
-
 func translate(text, from, to, googleHost string, withVerification bool, client *http.Client) (result *Translated, err error) {
 	if client == nil {
 		client = http.DefaultClient
@@ -29,18 +27,10 @@ func translate(text, from, to, googleHost string, withVerification bool, client 
 
 	urll := fmt.Sprintf("https://translate.%s/translate_a/single", googleHost)
 
-	token := get(text, "0", googleHost, client)
 	data := map[string]string{
 		"client": "gtx",
 		"sl":     from,
 		"tl":     to,
-		"hl":     to,
-		"ie":     "UTF-8",
-		"oe":     "UTF-8",
-		"otf":    "1",
-		"ssel":   "0",
-		"tsel":   "0",
-		"kc":     "7",
 		"q":      text,
 	}
 
@@ -54,11 +44,10 @@ func translate(text, from, to, googleHost string, withVerification bool, client 
 	for k, v := range data {
 		parameters.Add(k, v)
 	}
-	for _, v := range dt {
-		parameters.Add("dt", v)
-	}
+	parameters.Add("dt", "t")
 
-	parameters.Add("tk", token)
+	parameters.Add("dt", "rm")
+
 	u.RawQuery = parameters.Encode()
 
 	r, err := client.Get(u.String())
