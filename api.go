@@ -11,35 +11,32 @@ import (
 	"golang.org/x/text/language"
 )
 
-func translate(text, from, to, googleHost string, withVerification bool, client *http.Client) (result *Translated, err error) {
-	if client == nil {
-		client = http.DefaultClient
+func translate(text, to string, params *TranslationParams) (result *Translated, err error) {
+	if params.Client == nil {
+		params.Client = http.DefaultClient
 	}
 
-	if withVerification {
-		if _, err := language.Parse(from); err != nil && from != "auto" {
-			from = "auto"
+	if params.LangVerification {
+		if _, err := language.Parse(params.From); err != nil {
+			params.From = "auto"
 		}
 		if _, err := language.Parse(to); err != nil {
 			to = "en"
 		}
 	}
 
-	urll := fmt.Sprintf("https://translate.%s/translate_a/single", googleHost)
-
-	data := map[string]string{
-		"client": "gtx",
-		"sl":     from,
-		"tl":     to,
-		"q":      text,
-	}
-
-	u, err := url.Parse(urll)
+	uP, err := url.Parse(fmt.Sprintf("https://translate.%s/translate_a/single", params.GoogleHost))
 	if err != nil {
 		return result, err
 	}
+	parameters := uP.Query()
 
-	parameters := url.Values{}
+	data := map[string]string{
+		"client": "gtx",
+		"sl":     params.From,
+		"tl":     to,
+		"q":      text,
+	}
 
 	for k, v := range data {
 		parameters.Add(k, v)
@@ -48,9 +45,73 @@ func translate(text, from, to, googleHost string, withVerification bool, client 
 
 	parameters.Add("dt", "rm")
 
-	u.RawQuery = parameters.Encode()
+	uP.RawQuery = parameters.Encode()
 
-	r, err := client.Get(u.String())
+	r, err := params.Client.Get(uP.String())
+	if err != nil {
+		if err == http.ErrHandlerTimeout {
+			return result, errors.New("bad network, please check your internet connection")
+		}
+		return result, err
+	}
+	defer r.Body.Close()
+
+	if r.StatusCode != http.StatusOK {
+		return result, fmt.Errorf("return err, code: %d", r.StatusCode)
+	}
+
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
+		return result, err
+	}
+
+	if http.DetectContentType(raw) != `text/plain; charset=utf-8` {
+		return result, fmt.Errorf("return err, code: %d\n raw: %s", r.StatusCode, raw)
+	}
+
+	return parseRawTranslated(raw)
+}
+
+// id must between 1 and 5
+func translateWithClienID(text, to string, params *TranslationWithClienIDParams) (result *Translated, err error) {
+	if params.Client == nil {
+		params.Client = http.DefaultClient
+	}
+	if params.ClientID < 1 || params.ClientID > 5 {
+		params.ClientID = 5
+	}
+
+	if params.LangVerification {
+		if _, err := language.Parse(params.From); err != nil {
+			params.From = "auto"
+		}
+		if _, err := language.Parse(to); err != nil {
+			to = "en"
+		}
+	}
+
+	uP, err := url.Parse(fmt.Sprintf("https://clients%d.google.com/translate_a/single", params.ClientID))
+	if err != nil {
+		return result, err
+	}
+	parameters := uP.Query()
+
+	data := map[string]string{
+		"client": "dict-chrome-ex",
+		"sl":     params.From,
+		"tl":     to,
+		"q":      text,
+	}
+
+	for k, v := range data {
+		parameters.Add(k, v)
+	}
+	parameters.Add("dt", "t")
+
+	parameters.Add("dt", "rm")
+	uP.RawQuery = parameters.Encode()
+
+	r, err := params.Client.Get(uP.String())
 	if err != nil {
 		if err == http.ErrHandlerTimeout {
 			return result, errors.New("bad network, please check your internet connection")

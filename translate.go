@@ -41,12 +41,21 @@ func init() {
 
 // TranslationParams is a util struct to pass as parameter to indicate how to translate
 type TranslationParams struct {
-	From       string
-	To         string
-	Retry      int
-	RetryDelay time.Duration
-	GoogleHost string
-	Client     *http.Client
+	From             string
+	Retry            int
+	RetryDelay       time.Duration
+	LangVerification bool
+	GoogleHost       string
+	Client           *http.Client
+}
+
+type TranslationWithClienIDParams struct {
+	From             string
+	Retry            int
+	RetryDelay       time.Duration
+	LangVerification bool
+	ClientID         int
+	Client           *http.Client
 }
 
 const (
@@ -54,23 +63,34 @@ const (
 )
 
 // TranslateWithParams translate a text with simple params as string
-func Translate(text string, params TranslationParams) (translated *Translated, err error) {
+func Translate(text, To string, params TranslationParams) (translated *Translated, err error) {
 	if params.Retry == 0 {
 		params.Retry = defaultNumberOfRetries
 	}
 
-	var googleHost string
-
 	for params.Retry > 0 {
 		if params.GoogleHost == "" {
-			googleHost = <-sw
-		} else {
-			googleHost = params.GoogleHost
+			params.GoogleHost = <-sw
+			defer func() { sw <- params.GoogleHost }()
 		}
-		translated, err = translate(text, params.From, params.To, googleHost, true, params.Client)
-		if params.GoogleHost == "" {
-			sw <- googleHost
+		translated, err = translate(text, To, &params)
+		if err == nil {
+			return
 		}
+		params.Retry--
+		time.Sleep(params.RetryDelay)
+	}
+
+	return
+}
+
+func TranslateWithClienID(text, To string, params TranslationWithClienIDParams) (translated *Translated, err error) {
+	if params.Retry == 0 {
+		params.Retry = defaultNumberOfRetries
+	}
+
+	for params.Retry > 0 {
+		translated, err = translateWithClienID(text, To, &params)
 		if err == nil {
 			return
 		}
