@@ -1,4 +1,4 @@
-package gtranslate
+package gtranslator
 
 import (
 	"net/http"
