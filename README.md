@@ -1,6 +1,6 @@
 # google-translater
 
-```
+```go
 package main
 
 import (
