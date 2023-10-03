@@ -1,4 +1,4 @@
-module github.com/zijiren233/google-translater
+module github.com/zijiren233/google-translator
 
 go 1.19
 
